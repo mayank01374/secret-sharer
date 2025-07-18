@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 6, "column": 0}, "map": {"version":3,"sources":[],"names":[],"mappings":"","debugId":null}},
+    {"offset": {"line": 18, "column": 0}, "map": {"version":3,"sources":["file:///C:/NOTES/url/frontend/src/app/page.tsx"],"sourcesContent":["import ShortenForm from \"../components/ShortenForm\";\r\n\r\nexport default function Home() {\r\n  return (\r\n    <div className=\"min-h-screen bg-blue-50 flex items-center justify-center\">\r\n      <div className=\"bg-white p-8 rounded-lg shadow-lg\">\r\n        <h1 className=\"text-2xl font-bold mb-4\">URL Shortener</h1>\r\n        <p className=\"text-gray-600\">Your URL shortener is working!</p>\r\n      </div>\r\n    </div>\r\n  );\r\n}\r\n"],"names":[],"mappings":";;;;;AAEe,SAAS;IACtB,qBACE,8OAAC;QAAI,WAAU;kBACb,cAAA,8OAAC;YAAI,WAAU;;8BACb,8OAAC;oBAAG,WAAU;8BAA0B;;;;;;8BACxC,8OAAC;oBAAE,WAAU;8BAAgB;;;;;;;;;;;;;;;;;AAIrC","debugId":null}}]
+}
