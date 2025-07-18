@@ -7,10 +7,8 @@ import bcrypt from 'bcrypt';
 
 const router = Router();
 
-// Encryption key (in production, use environment variable)
 const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'your-secret-key-32-chars-long!!';
 
-// Simple AES encryption/decryption
 function encrypt(text: string): string {
   const iv = crypto.randomBytes(16);
   const cipher = crypto.createCipher('aes-256-cbc', ENCRYPTION_KEY);
@@ -30,7 +28,7 @@ function decrypt(encryptedText: string): string {
 }
 
 router.post('/', async (req: Request, res: Response) => {
-  const { content, password, expiresIn = 60 } = req.body; // Default 60 minutes
+  const { content, password, expiresIn = 60 } = req.body;
 
   if (!content) {
     return res.status(400).json({ error: 'Content is required' });
@@ -45,32 +43,27 @@ router.post('/', async (req: Request, res: Response) => {
   let passwordHash = null;
 
   try {
-    // Hash password if provided
     if (password) {
       passwordHash = await bcrypt.hash(password, 10);
     }
 
-    // Calculate expiry time
     const expiresAt = new Date(Date.now() + expiresIn * 60 * 1000);
 
-    // Store in database
     await db.query(
       'INSERT INTO secrets (secret_id, encrypted_content, password_hash, expires_at, created_at, access_count) VALUES ($1, $2, $3, $4, $5, $6)',
       [secretId, encryptedContent, passwordHash, expiresAt, new Date(), 0]
     );
 
-    // Audit log: secret created
     await db.query(
       `INSERT INTO audit_logs (secret_id, event_type, ip_address, user_agent)
        VALUES ($1, $2, $3, $4)`,
       [secretId, 'created', req.ip, req.headers['user-agent']]
     );
 
-    // Store in Redis with TTL
     const redisKey = `secret:${secretId}`;
     await redis.set(redisKey, encryptedContent, { EX: expiresIn * 60 });
 
-    const secretUrl = `${process.env.BASE_URL || 'http://localhost:3000'}/secret/${secretId}`;
+    const secretUrl = `${process.env.FRONTEND_URL || 'http://localhost:5000'}/secret/${secretId}`;
     res.status(201).json({ 
       secretUrl,
       expiresAt: expiresAt.toISOString(),
