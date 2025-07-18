@@ -48,6 +48,7 @@ router.get('/secret/:id', async (req: Request, res: Response) => {
         return res.status(403).json({ error: 'Incorrect password' });
       }
     }
+    //COMMENT ADDED TO REDELPOY
 
     if (!encryptedContent) {
       return res.status(404).json({ error: 'Secret not found' });
