@@ -63,7 +63,7 @@ router.post('/', async (req: Request, res: Response) => {
     const redisKey = `secret:${secretId}`;
     await redis.set(redisKey, encryptedContent, { EX: expiresIn * 60 });
 
-    const secretUrl = `${process.env.FRONTEND_URL || 'http://localhost:5000'}/secret/${secretId}`;
+    const secretUrl = `${process.env.FRONTEND_URL}/secret/${secretId}`;
     res.status(201).json({ 
       secretUrl,
       expiresAt: expiresAt.toISOString(),
