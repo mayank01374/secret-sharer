@@ -14,5 +14,5 @@ RUN npm run build
 # Expose the frontend port
 EXPOSE 5000
 
-# Start the Next.js app
+# Start the Next.js app on port 5000
 CMD ["npm", "run", "start", "--", "-p", "5000"] 
