@@ -17,7 +17,7 @@ export default function SecretLinkBox({ secretUrl }: { secretUrl: string }) {
           text: "Here's your one-time secret link",
           url: secretUrl,
         });
-      } catch (err) {
+      } catch {
         // Share canceled or failed
       }
     } else {

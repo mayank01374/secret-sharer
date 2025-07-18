@@ -4,10 +4,8 @@
   "description": "Scalable URL shortener built with TypeScript, Node.js, PostgreSQL, and Redis",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node dist/index.js"
   },
   "keywords": [
     "url-shortener",
