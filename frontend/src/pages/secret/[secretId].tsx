@@ -16,47 +16,64 @@ export default function SecretViewer() {
 
   useEffect(() => {
     if (!secretId) return;
-    fetch(`${BACKEND_URL}/secret/${secretId}`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.content) {
-          setSecret(data.content);
-        } else if (data.requiresPassword) {
-          setRequiresPassword(true);
-        } else {
-          setError(
-            data.error ||
-              data.message ||
-              "Secret not found or already accessed."
-          );
-        }
+    fetch(`${BACKEND_URL}/secret/${secretId}`).then(async (res) => {
+      if (res.status === 410) {
+        setError("⚠️ THE INTENDED USER HAS ALREADY SEEN THE SECRET");
         setLoading(false);
-      });
+        return;
+      }
+      const data = await res.json();
+      if (data.content) {
+        setSecret(data.content);
+      } else if (data.requiresPassword) {
+        setRequiresPassword(true);
+      } else {
+        setError(
+          data.error || data.message || "Secret not found or already accessed."
+        );
+      }
+      setLoading(false);
+    });
   }, [secretId]);
 
   const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError("");
+    // First, verify the password with POST
+    const verifyRes = await fetch(`${BACKEND_URL}/secret/${secretId}/verify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password }),
+    });
+    if (!verifyRes.ok) {
+      const data = await verifyRes.json();
+      setError(data.error || "Invalid password or secret not found.");
+      setLoading(false);
+      return;
+    }
+    // If password is correct, fetch the secret with the password as a query param
     fetch(
       `${BACKEND_URL}/secret/${secretId}?password=${encodeURIComponent(
         password
       )}`
-    )
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.content) {
-          setSecret(data.content);
-          setRequiresPassword(false);
-        } else {
-          setError(
-            data.error ||
-              data.message ||
-              "Invalid password or secret not found."
-          );
-        }
+    ).then(async (res) => {
+      if (res.status === 410) {
+        setError("⚠️ THE INTENDED USER HAS ALREADY SEEN THE SECRET");
         setLoading(false);
-      });
+        return;
+      }
+      const data = await res.json();
+      if (data.content) {
+        setSecret(data.content);
+        setRequiresPassword(false);
+      } else {
+        setError(
+          data.error || data.message || "Invalid password or secret not found."
+        );
+      }
+      setLoading(false);
+    });
   };
 
   const handleCopy = () => {
@@ -92,10 +109,14 @@ export default function SecretViewer() {
             >
               View Secret
             </button>
-            {error && <p className="text-red-400">{error}</p>}
+            {error && (
+              <p className="text-red-400 font-bold text-lg text-center">
+                {error}
+              </p>
+            )}
           </form>
         ) : error ? (
-          <p className="text-red-400">{error}</p>
+          <p className="text-red-400 font-bold text-lg text-center">{error}</p>
         ) : (
           <>
             <pre className="bg-gray-700 p-4 rounded text-lg break-words">

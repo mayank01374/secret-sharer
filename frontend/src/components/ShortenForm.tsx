@@ -12,9 +12,12 @@ export default function SecretForm() {
   const [secretUrl, setSecretUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+  const [enablePassword, setEnablePassword] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitted) return;
     setLoading(true);
     setError("");
     setSecretUrl("");
@@ -27,7 +30,7 @@ export default function SecretForm() {
         },
         body: JSON.stringify({
           content,
-          password: password || undefined,
+          password: enablePassword ? password : undefined,
           expiresIn,
         }),
       });
@@ -39,6 +42,7 @@ export default function SecretForm() {
       }
 
       setSecretUrl(data.secretUrl);
+      setSubmitted(true);
     } catch (err) {
       if (err instanceof Error) {
         setError(err.message);
@@ -65,18 +69,32 @@ export default function SecretForm() {
       </div>
 
       <div>
-        <label className="block text-sm font-medium">
-          Password Protection{" "}
-          <span className="text-sm text-gray-400">(Optional)</span>
+        <label className="inline-flex items-center gap-2">
+          <input
+            type="checkbox"
+            className="form-checkbox text-purple-600"
+            checked={enablePassword}
+            onChange={(e) => {
+              setEnablePassword(e.target.checked);
+              if (!e.target.checked) setPassword("");
+            }}
+          />
+          Enable Password Protection
         </label>
-        <input
-          type="password"
-          className="w-full p-3 rounded-md bg-gray-700 border border-gray-600 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-          placeholder="Leave empty for no password protection"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
       </div>
+
+      {enablePassword && (
+        <div>
+          <input
+            type="password"
+            className="w-full p-3 rounded-md bg-gray-700 border border-gray-600 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 mt-2"
+            placeholder="Enter password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
+        </div>
+      )}
 
       <div>
         <label className="block text-sm font-medium">Expires In</label>
@@ -97,10 +115,14 @@ export default function SecretForm() {
 
       <button
         type="submit"
-        disabled={loading}
+        disabled={loading || submitted}
         className="w-full py-3 bg-purple-600 hover:bg-purple-700 rounded-md font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        {loading ? "Creating Secret..." : "Create Secret"}
+        {loading
+          ? "Creating Secret..."
+          : submitted
+          ? "Secret Created"
+          : "Create Secret"}
       </button>
 
       {error && (
