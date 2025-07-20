@@ -1,19 +1,19 @@
 import { useState } from "react";
 import SecretLinkBox from "./SecretLinkBox";
+import QRCode from "react-qr-code";
 
-// Update this URL if your backend runs on a different port or host
 const BACKEND_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3000";
 
 export default function SecretForm() {
   const [content, setContent] = useState("");
+  const [usePassword, setUsePassword] = useState(false);
   const [password, setPassword] = useState("");
   const [expiresIn, setExpiresIn] = useState(60);
   const [secretUrl, setSecretUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [submitted, setSubmitted] = useState(false);
-  const [enablePassword, setEnablePassword] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,113 +25,122 @@ export default function SecretForm() {
     try {
       const res = await fetch(`${BACKEND_URL}/create`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           content,
-          password: enablePassword ? password : undefined,
+          password: usePassword ? password : undefined,
           expiresIn,
         }),
       });
 
       const data = await res.json();
 
-      if (!res.ok) {
-        throw new Error(data.error || "Something went wrong");
-      }
+      if (!res.ok) throw new Error(data.error || "Something went wrong");
 
       setSecretUrl(data.secretUrl);
       setSubmitted(true);
     } catch (err) {
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError("An unknown error occurred.");
-      }
+      setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
-        <label className="block text-sm font-medium mb-2">Your Secret</label>
+    <div className="grid md:grid-cols-2 gap-6 w-full max-w-5xl mx-auto p-4">
+      {/* Left: Form */}
+      <form
+        onSubmit={handleSubmit}
+        className="space-y-4 bg-gray-800 p-6 rounded-xl shadow-xl"
+      >
+        <h2 className="text-xl font-bold text-white mb-4">
+          🔐 Create a Secret
+        </h2>
         <textarea
           rows={4}
           className="w-full p-3 rounded-md bg-gray-700 border border-gray-600 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-          placeholder="Enter your secret message, password, token..."
+          placeholder="Enter your secret message..."
           value={content}
           onChange={(e) => setContent(e.target.value)}
           required
         />
-      </div>
 
-      <div>
-        <label className="inline-flex items-center gap-2">
+        <div className="flex items-center space-x-2">
           <input
             type="checkbox"
-            className="form-checkbox text-purple-600"
-            checked={enablePassword}
-            onChange={(e) => {
-              setEnablePassword(e.target.checked);
-              if (!e.target.checked) setPassword("");
-            }}
+            checked={usePassword}
+            onChange={() => setUsePassword(!usePassword)}
           />
-          Enable Password Protection
-        </label>
-      </div>
+          <label className="text-white">Protect with password</label>
+        </div>
 
-      {enablePassword && (
-        <div>
+        {usePassword && (
           <input
             type="password"
-            className="w-full p-3 rounded-md bg-gray-700 border border-gray-600 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 mt-2"
+            className="w-full p-3 rounded-md bg-gray-700 border border-gray-600 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
             placeholder="Enter password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            required
           />
-        </div>
-      )}
+        )}
 
-      <div>
-        <label className="block text-sm font-medium">Expires In</label>
-        <select
-          className="w-full p-3 rounded-md bg-gray-700 border border-gray-600 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-          value={expiresIn}
-          onChange={(e) => setExpiresIn(Number(e.target.value))}
+        <div>
+          <label className="block text-sm font-medium text-white">
+            Expires In
+          </label>
+          <select
+            className="w-full p-3 rounded-md bg-gray-700 border border-gray-600 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+            value={expiresIn}
+            onChange={(e) => setExpiresIn(Number(e.target.value))}
+          >
+            <option value={10}>10 minutes</option>
+            <option value={30}>30 minutes</option>
+            <option value={60}>1 hour</option>
+            <option value={180}>3 hours</option>
+            <option value={360}>6 hours</option>
+            <option value={720}>12 hours</option>
+            <option value={1440}>24 hours</option>
+          </select>
+        </div>
+
+        <button
+          type="submit"
+          disabled={loading || submitted}
+          className="w-full py-3 bg-purple-600 hover:bg-purple-700 rounded-md font-semibold text-white transition disabled:opacity-50"
         >
-          <option value={10}>10 minutes</option>
-          <option value={30}>30 minutes</option>
-          <option value={60}>1 hour</option>
-          <option value={180}>3 hours</option>
-          <option value={360}>6 hours</option>
-          <option value={720}>12 hours</option>
-          <option value={1440}>24 hours</option>
-        </select>
+          {loading ? "Creating..." : submitted ? "Created" : "Create Secret"}
+        </button>
+
+        {error && (
+          <div className="p-3 bg-red-900/50 border border-red-700 rounded-md">
+            <p className="text-red-400 text-center">{error}</p>
+          </div>
+        )}
+      </form>
+
+      {/* Right: Output */}
+      <div className="bg-gray-900 text-white p-6 rounded-xl shadow-xl flex flex-col items-center justify-center">
+        {secretUrl ? (
+          <>
+            <p className="text-lg text-green-400 font-semibold mb-2">
+              ✅ Secret created successfully!
+            </p>
+            <SecretLinkBox secretUrl={secretUrl} />
+            <div className="mt-4">
+              <QRCode
+                value={secretUrl}
+                size={128}
+                bgColor="#1f2937"
+                fgColor="#ffffff"
+              />
+            </div>
+          </>
+        ) : (
+          <p className="text-sm text-gray-400 text-center">
+            Your generated secret will appear here.
+          </p>
+        )}
       </div>
-
-      <button
-        type="submit"
-        disabled={loading || submitted}
-        className="w-full py-3 bg-purple-600 hover:bg-purple-700 rounded-md font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        {loading
-          ? "Creating Secret..."
-          : submitted
-          ? "Secret Created"
-          : "Create Secret"}
-      </button>
-
-      {error && (
-        <div className="p-3 bg-red-900/50 border border-red-700 rounded-md">
-          <p className="text-red-400 text-center">{error}</p>
-        </div>
-      )}
-
-      {secretUrl && <SecretLinkBox secretUrl={secretUrl} />}
-    </form>
+    </div>
   );
 }
