@@ -15,6 +15,16 @@ export default function SecretForm() {
   const [error, setError] = useState("");
   const [submitted, setSubmitted] = useState(false);
 
+  const expiryOptions = [
+    { value: 10, label: "10 minutes" },
+    { value: 30, label: "30 minutes" },
+    { value: 60, label: "1 hour" },
+    { value: 180, label: "3 hours" },
+    { value: 360, label: "6 hours" },
+    { value: 720, label: "12 hours" },
+    { value: 1440, label: "24 hours" },
+  ];
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (submitted) return;
@@ -63,6 +73,7 @@ export default function SecretForm() {
           value={content}
           onChange={(e) => setContent(e.target.value)}
           required
+          autoFocus
         />
 
         <div className="flex items-center space-x-2">
@@ -93,13 +104,11 @@ export default function SecretForm() {
             value={expiresIn}
             onChange={(e) => setExpiresIn(Number(e.target.value))}
           >
-            <option value={10}>10 minutes</option>
-            <option value={30}>30 minutes</option>
-            <option value={60}>1 hour</option>
-            <option value={180}>3 hours</option>
-            <option value={360}>6 hours</option>
-            <option value={720}>12 hours</option>
-            <option value={1440}>24 hours</option>
+            {expiryOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
           </select>
         </div>
 
