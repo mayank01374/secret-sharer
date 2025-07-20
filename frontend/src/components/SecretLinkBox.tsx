@@ -1,4 +1,5 @@
 import { useState } from "react";
+import QRCode from "react-qr-code";
 
 export default function SecretLinkBox({ secretUrl }: { secretUrl: string }) {
   const [copied, setCopied] = useState(false);
@@ -47,6 +48,31 @@ export default function SecretLinkBox({ secretUrl }: { secretUrl: string }) {
           </button>
         </div>
       </div>
+      {/* QR Code with fade-in animation */}
+      <div className="flex justify-center mt-6 animate-fade-in">
+        <QRCode
+          value={secretUrl}
+          size={148}
+          bgColor="#1a1a1a"
+          fgColor="#18e320"
+          style={{ borderRadius: 12, boxShadow: "0 4px 24px #18e32033" }}
+        />
+      </div>
+      <style jsx>{`
+        @keyframes fade-in {
+          from {
+            opacity: 0;
+            transform: scale(0.95);
+          }
+          to {
+            opacity: 1;
+            transform: scale(1);
+          }
+        }
+        .animate-fade-in {
+          animation: fade-in 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+      `}</style>
     </div>
   );
 }
