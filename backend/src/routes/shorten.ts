@@ -60,6 +60,7 @@ router.post('/', async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+//shorten logic
 
 router.post('/shorten', async (req: Request, res: Response) => {
   const { content, expiresIn = 60 } = req.body;
