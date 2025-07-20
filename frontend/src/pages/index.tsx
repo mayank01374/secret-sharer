@@ -4,6 +4,14 @@ import SecretLinkBox from "@/components/SecretLinkBox";
 const BACKEND_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3000";
 
+// Custom type for window with VANTA and THREE
+interface WindowWithVanta extends Window {
+  VANTA?: {
+    NET?: (options: Record<string, unknown>) => { destroy?: () => void };
+  };
+  THREE?: unknown;
+}
+
 export default function HomePage() {
   const [content, setContent] = useState("");
   const [password, setPassword] = useState("");
@@ -14,11 +22,12 @@ export default function HomePage() {
   const [submitted, setSubmitted] = useState(false);
   const vantaRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    let vantaEffect: any;
+    let vantaEffect: { destroy?: () => void } | null = null;
     if (typeof window !== "undefined" && vantaRef.current) {
+      const win = window as WindowWithVanta;
       // Dynamically load VANTA and THREE from CDN
       const loadVanta = async () => {
-        if (!(window as any).THREE) {
+        if (!win.THREE) {
           await new Promise((resolve) => {
             const script = document.createElement("script");
             script.src =
@@ -27,7 +36,7 @@ export default function HomePage() {
             document.body.appendChild(script);
           });
         }
-        if (!(window as any).VANTA || !(window as any).VANTA.NET) {
+        if (!win.VANTA || !win.VANTA.NET) {
           await new Promise((resolve) => {
             const script = document.createElement("script");
             script.src =
@@ -36,22 +45,24 @@ export default function HomePage() {
             document.body.appendChild(script);
           });
         }
-        vantaEffect = (window as any).VANTA.NET({
-          el: vantaRef.current,
-          mouseControls: true,
-          touchControls: true,
-          gyroControls: false,
-          minHeight: 200.0,
-          minWidth: 200.0,
-          scale: 1.0,
-          scaleMobile: 1.0,
-          color: 0x1f1a90,
-          backgroundColor: 0x2b1c42,
-          points: 10,
-          maxDistance: 20,
-          spacing: 15,
-          showDots: true,
-        });
+        if (win.VANTA && win.VANTA.NET) {
+          vantaEffect = win.VANTA.NET({
+            el: vantaRef.current,
+            mouseControls: true,
+            touchControls: true,
+            gyroControls: false,
+            minHeight: 200.0,
+            minWidth: 200.0,
+            scale: 1.0,
+            scaleMobile: 1.0,
+            color: 0x18e320,
+            backgroundColor: 0x9025b,
+            points: 10,
+            maxDistance: 20,
+            spacing: 15,
+            showDots: true,
+          });
+        }
       };
       loadVanta();
     }
