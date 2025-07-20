@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import SecretLinkBox from "@/components/SecretLinkBox";
 
 const BACKEND_URL =
@@ -12,6 +12,55 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const vantaRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    let vantaEffect: any;
+    if (typeof window !== "undefined" && vantaRef.current) {
+      // Dynamically load VANTA and THREE from CDN
+      const loadVanta = async () => {
+        if (!(window as any).THREE) {
+          await new Promise((resolve) => {
+            const script = document.createElement("script");
+            script.src =
+              "https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js";
+            script.onload = resolve;
+            document.body.appendChild(script);
+          });
+        }
+        if (!(window as any).VANTA || !(window as any).VANTA.NET) {
+          await new Promise((resolve) => {
+            const script = document.createElement("script");
+            script.src =
+              "https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.net.min.js";
+            script.onload = resolve;
+            document.body.appendChild(script);
+          });
+        }
+        vantaEffect = (window as any).VANTA.NET({
+          el: vantaRef.current,
+          mouseControls: true,
+          touchControls: true,
+          gyroControls: false,
+          minHeight: 200.0,
+          minWidth: 200.0,
+          scale: 1.0,
+          scaleMobile: 1.0,
+          color: 0x1f1a90,
+          backgroundColor: 0x2b1c42,
+          points: 10,
+          maxDistance: 20,
+          spacing: 15,
+          showDots: true,
+        });
+      };
+      loadVanta();
+    }
+    return () => {
+      if (vantaEffect && typeof vantaEffect.destroy === "function") {
+        vantaEffect.destroy();
+      }
+    };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,9 +102,14 @@ export default function HomePage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white px-8 py-12 grid grid-cols-1 md:grid-cols-2 gap-10">
+    <div
+      ref={vantaRef}
+      id="vanta-bg"
+      className="min-h-screen w-full bg-[#0a0a0a] text-white px-8 py-12 grid grid-cols-1 md:grid-cols-2 gap-10 relative"
+    >
+      <div className="absolute inset-0 z-0" />
       {/* Form Section */}
-      <div className="flex flex-col justify-center">
+      <div className="flex flex-col justify-center z-10">
         <h1 className="text-4xl font-bold mb-6">Create a One-Time Secret</h1>
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
@@ -124,7 +178,7 @@ export default function HomePage() {
       </div>
 
       {/* Output Section */}
-      <div className="flex flex-col justify-center">
+      <div className="flex flex-col justify-center z-10">
         {secretUrl ? (
           <SecretLinkBox secretUrl={secretUrl} />
         ) : (
