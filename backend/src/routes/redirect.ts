@@ -20,14 +20,14 @@ function decrypt(encryptedText: string): string {
 
 router.get('/secret/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const password = req.query.password as string | undefined;
 
   try {
     const redisKey = `secret:${id}`;
-    let encryptedContent = await redis.get(redisKey);
+    let ciphertext = await redis.get(redisKey);
     let secret: any = null;
+    let iv: string | null = null;
 
-    if (!encryptedContent) {
+    if (!ciphertext) {
       const result = await db.query('SELECT * FROM secrets WHERE secret_id = $1', [id]);
       if (result.rows.length === 0) {
         return res.status(404).json({ error: 'Secret not found' });
@@ -36,24 +36,25 @@ router.get('/secret/:id', async (req: Request, res: Response) => {
       if (secret.accessed_at || new Date(secret.expires_at) < new Date()) {
         return res.status(410).json({ error: 'Secret has expired or was already viewed' });
       }
-      encryptedContent = secret.encrypted_content;
+      ciphertext = secret.encrypted_content;
+      iv = secret.iv;
+    } else {
+      // If found in redis, fetch iv from db
+      const result = await db.query('SELECT iv, accessed_at, expires_at FROM secrets WHERE secret_id = $1', [id]);
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Secret not found' });
+      }
+      secret = result.rows[0];
+      if (secret.accessed_at || new Date(secret.expires_at) < new Date()) {
+        return res.status(410).json({ error: 'Secret has expired or was already viewed' });
+      }
+      iv = secret.iv;
     }
 
-    if (secret?.password_hash) {
-      if (!password) {
-        return res.status(401).json({ requiresPassword: true });
-      }
-      const match = await bcrypt.compare(password, secret.password_hash);
-      if (!match) {
-        return res.status(403).json({ error: 'Incorrect password' });
-      }
-    }
-    //COMMENT ADDED TO REDELPOY
-
-    if (!encryptedContent) {
+    if (!ciphertext || !iv) {
       return res.status(404).json({ error: 'Secret not found' });
     }
-    const content = decrypt(encryptedContent);
+
     await db.query(
       'UPDATE secrets SET accessed_at = $1, access_count = access_count + 1 WHERE secret_id = $2',
       [new Date(), id]
@@ -64,7 +65,7 @@ router.get('/secret/:id', async (req: Request, res: Response) => {
        VALUES ($1, $2, $3, $4)`,
       [id, 'accessed', req.ip, req.headers['user-agent']]
     );
-    return res.json({ content });
+    return res.json({ content: ciphertext });
   } catch (err) {
     console.error('Error retrieving secret:', err);
     return res.status(500).json({ error: 'Internal server error' });

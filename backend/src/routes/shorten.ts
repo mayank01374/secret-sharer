@@ -28,30 +28,20 @@ function decrypt(encryptedText: string): string {
 }
 
 router.post('/', async (req: Request, res: Response) => {
-  const { content, password, expiresIn = 60 } = req.body;
+  const { ciphertext, iv, expiresIn = 60 } = req.body;
 
-  if (!content) {
-    return res.status(400).json({ error: 'Content is required' });
-  }
-
-  if (content.length > 10000) {
-    return res.status(400).json({ error: 'Content too long (max 10KB)' });
+  if (!ciphertext || !iv) {
+    return res.status(400).json({ error: 'Missing ciphertext or IV' });
   }
 
   const secretId = nanoid(12);
-  const encryptedContent = encrypt(content);
-  let passwordHash = null;
 
   try {
-    if (password) {
-      passwordHash = await bcrypt.hash(password, 10);
-    }
-
     const expiresAt = new Date(Date.now() + expiresIn * 60 * 1000);
 
     await db.query(
-      'INSERT INTO secrets (secret_id, encrypted_content, password_hash, expires_at, created_at, access_count) VALUES ($1, $2, $3, $4, $5, $6)',
-      [secretId, encryptedContent, passwordHash, expiresAt, new Date(), 0]
+      'INSERT INTO secrets (secret_id, encrypted_content, iv, expires_at, created_at, access_count) VALUES ($1, $2, $3, $4, $5, $6)',
+      [secretId, ciphertext, iv, expiresAt, new Date(), 0]
     );
 
     await db.query(
@@ -61,17 +51,38 @@ router.post('/', async (req: Request, res: Response) => {
     );
 
     const redisKey = `secret:${secretId}`;
-    await redis.set(redisKey, encryptedContent, { EX: expiresIn * 60 });
+    await redis.set(redisKey, ciphertext, { EX: expiresIn * 60 });
 
-    const secretUrl = `${process.env.FRONTEND_URL}/secret/${secretId}`;
-    res.status(201).json({ 
-      secretUrl,
-      expiresAt: expiresAt.toISOString(),
-      expiresIn: `${expiresIn} minutes`
-    });
+    const shortUrl = `${process.env.FRONTEND_URL}/secret/${secretId}`;
+    res.status(201).json({ shortUrl });
   } catch (error) {
     console.error('Error creating secret:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/shorten', async (req: Request, res: Response) => {
+  const { content, expiresIn = 60 } = req.body;
+
+  if (!content) return res.status(400).json({ error: 'Ciphertext required' });
+
+  const secretId = nanoid(8);
+  const expiresAt = new Date(Date.now() + expiresIn * 60 * 1000);
+
+  try {
+    await db.query(
+      'INSERT INTO secrets (secret_id, encrypted_content, expires_at, created_at, access_count) VALUES ($1, $2, $3, $4, $5)',
+      [secretId, content, expiresAt, new Date(), 0]
+    );
+
+    const redisKey = `secret:${secretId}`;
+    await redis.set(redisKey, content, { EX: expiresIn * 60 });
+
+    const secretUrl = `${process.env.FRONTEND_URL || 'http://localhost:5000'}/secret/${secretId}`;
+    res.status(201).json({ secretUrl });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to create secret' });
   }
 });
 
