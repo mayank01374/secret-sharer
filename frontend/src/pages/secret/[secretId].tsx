@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/router";
 import { motion } from "framer-motion";
-import { decryptMessage, importKey } from "@/utils/encryption";
+import CryptoJS from "crypto-js";
 
 const BACKEND_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3000";
@@ -76,37 +76,32 @@ export default function SecretViewer() {
 
   useEffect(() => {
     if (!secretId) return;
-    const keyBase64 = window.location.hash.slice(1);
-    if (!keyBase64) {
+
+    const hash = window.location.hash.slice(1); // decryption key
+    if (!hash) {
       setError("Missing decryption key in URL.");
       setLoading(false);
       return;
     }
+
     fetch(`${BACKEND_URL}/secret/${secretId}`)
       .then((res) => res.json())
-      .then(async (data) => {
-        if (!data.ciphertext || !data.iv) {
-          setError(
-            data.error ||
-              data.message ||
-              "Secret not found or already accessed."
-          );
-          setLoading(false);
+      .then((data) => {
+        if (!data.content) {
+          setError("Secret not found or expired");
           return;
         }
         try {
-          const key = await importKey(keyBase64);
-          const decrypted = await decryptMessage(data.ciphertext, data.iv, key);
+          const bytes = CryptoJS.AES.decrypt(data.content, hash);
+          const decrypted = bytes.toString(CryptoJS.enc.Utf8);
+          if (!decrypted) throw new Error("Wrong key or corrupted data");
           setSecret(decrypted);
         } catch {
-          setError("Invalid secret or corrupted data.");
+          setError("Failed to decrypt secret.");
         }
-        setLoading(false);
       })
-      .catch(() => {
-        setError("Invalid secret or corrupted data.");
-        setLoading(false);
-      });
+      .catch(() => setError("Error loading secret"))
+      .finally(() => setLoading(false));
   }, [secretId]);
 
   const handleCopy = () => {
