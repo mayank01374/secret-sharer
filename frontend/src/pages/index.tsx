@@ -56,7 +56,7 @@ export default function HomePage() {
             scale: 1.0,
             scaleMobile: 1.0,
             color: 0x18e320,
-            backgroundColor: 0x9025b,
+            backgroundColor: 0x9091f,
             points: 10,
             maxDistance: 20,
             spacing: 15,

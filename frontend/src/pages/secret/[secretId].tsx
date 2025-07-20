@@ -1,8 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/router";
+import { motion } from "framer-motion";
+import { decryptMessage, importKey } from "@/utils/encryption";
 
 const BACKEND_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3000";
+
+// Custom type for window with VANTA and THREE
+interface WindowWithVanta extends Window {
+  VANTA?: {
+    NET?: (options: Record<string, unknown>) => { destroy?: () => void };
+  };
+  THREE?: unknown;
+}
 
 export default function SecretViewer() {
   const router = useRouter();
@@ -10,71 +20,94 @@ export default function SecretViewer() {
   const [secret, setSecret] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [password, setPassword] = useState("");
-  const [requiresPassword, setRequiresPassword] = useState(false);
   const [copied, setCopied] = useState(false);
+  const vantaRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let vantaEffect: { destroy?: () => void } | null = null;
+    if (typeof window !== "undefined" && vantaRef.current) {
+      const win = window as WindowWithVanta;
+      const loadVanta = async () => {
+        if (!win.THREE) {
+          await new Promise((resolve) => {
+            const script = document.createElement("script");
+            script.src =
+              "https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js";
+            script.onload = resolve;
+            document.body.appendChild(script);
+          });
+        }
+        if (!win.VANTA || !win.VANTA.NET) {
+          await new Promise((resolve) => {
+            const script = document.createElement("script");
+            script.src =
+              "https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.net.min.js";
+            script.onload = resolve;
+            document.body.appendChild(script);
+          });
+        }
+        if (win.VANTA && win.VANTA.NET) {
+          vantaEffect = win.VANTA.NET({
+            el: vantaRef.current,
+            mouseControls: true,
+            touchControls: true,
+            gyroControls: false,
+            minHeight: 200.0,
+            minWidth: 200.0,
+            scale: 1.0,
+            scaleMobile: 1.0,
+            color: 0x18e320,
+            backgroundColor: 0x9091f,
+            points: 10,
+            maxDistance: 20,
+            spacing: 15,
+            showDots: true,
+          });
+        }
+      };
+      loadVanta();
+    }
+    return () => {
+      if (vantaEffect && typeof vantaEffect.destroy === "function") {
+        vantaEffect.destroy();
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!secretId) return;
-    fetch(`${BACKEND_URL}/secret/${secretId}`).then(async (res) => {
-      if (res.status === 410) {
-        setError("⚠️ THE INTENDED USER HAS ALREADY SEEN THE SECRET");
-        setLoading(false);
-        return;
-      }
-      const data = await res.json();
-      if (data.content) {
-        setSecret(data.content);
-      } else if (data.requiresPassword) {
-        setRequiresPassword(true);
-      } else {
-        setError(
-          data.error || data.message || "Secret not found or already accessed."
-        );
-      }
-      setLoading(false);
-    });
-  }, [secretId]);
-
-  const handlePasswordSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError("");
-    // First, verify the password with POST
-    const verifyRes = await fetch(`${BACKEND_URL}/secret/${secretId}/verify`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password }),
-    });
-    if (!verifyRes.ok) {
-      const data = await verifyRes.json();
-      setError(data.error || "Invalid password or secret not found.");
+    const keyBase64 = window.location.hash.slice(1);
+    if (!keyBase64) {
+      setError("Missing decryption key in URL.");
       setLoading(false);
       return;
     }
-    // If password is correct, fetch the secret with the password as a query param
-    fetch(
-      `${BACKEND_URL}/secret/${secretId}?password=${encodeURIComponent(
-        password
-      )}`
-    ).then(async (res) => {
-      if (res.status === 410) {
-        setError("⚠️ THE INTENDED USER HAS ALREADY SEEN THE SECRET");
+    fetch(`${BACKEND_URL}/secret/${secretId}`)
+      .then((res) => res.json())
+      .then(async (data) => {
+        if (!data.ciphertext || !data.iv) {
+          setError(
+            data.error ||
+              data.message ||
+              "Secret not found or already accessed."
+          );
+          setLoading(false);
+          return;
+        }
+        try {
+          const key = await importKey(keyBase64);
+          const decrypted = await decryptMessage(data.ciphertext, data.iv, key);
+          setSecret(decrypted);
+        } catch {
+          setError("Invalid secret or corrupted data.");
+        }
         setLoading(false);
-        return;
-      }
-      const data = await res.json();
-      if (data.content) {
-        setSecret(data.content);
-        setRequiresPassword(false);
-      } else {
-        setError(
-          data.error || data.message || "Invalid password or secret not found."
-        );
-      }
-      setLoading(false);
-    });
-  };
+      })
+      .catch(() => {
+        setError("Invalid secret or corrupted data.");
+        setLoading(false);
+      });
+  }, [secretId]);
 
   const handleCopy = () => {
     if (secret) {
@@ -84,56 +117,65 @@ export default function SecretViewer() {
     }
   };
 
-  if (loading) return <p className="text-center text-white">Loading...</p>;
+  if (loading)
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a] text-white">
+        <p className="text-center text-lg">Loading...</p>
+      </div>
+    );
 
   return (
-    <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
-      <div className="bg-gray-800 text-white p-6 rounded-lg shadow-xl max-w-xl w-full">
-        <h2 className="text-2xl font-bold mb-4">🔐 Secret</h2>
-        {requiresPassword ? (
-          <form onSubmit={handlePasswordSubmit} className="space-y-4">
-            <label className="block text-sm font-medium">
-              Password Required
-            </label>
-            <input
-              type="password"
-              className="w-full p-3 rounded-md bg-gray-700 border border-gray-600 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-              placeholder="Enter password to view secret"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-            <button
-              type="submit"
-              className="w-full py-3 bg-purple-600 hover:bg-purple-700 rounded-md font-semibold transition"
-            >
-              View Secret
-            </button>
-            {error && (
-              <p className="text-red-400 font-bold text-lg text-center">
-                {error}
-              </p>
-            )}
-          </form>
-        ) : error ? (
-          <p className="text-red-400 font-bold text-lg text-center">{error}</p>
+    <div
+      ref={vantaRef}
+      id="vanta-bg"
+      className="min-h-screen w-full bg-[#0a0a0a] text-white px-8 py-12 flex items-center justify-center relative"
+    >
+      <div className="absolute inset-0 z-0" />
+      <motion.div
+        className="bg-white/5 backdrop-blur-lg border border-white/10 rounded-2xl p-8 shadow-2xl max-w-xl w-full z-10 backdrop-blur-md"
+        initial={{ opacity: 0, y: 30 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6 }}
+      >
+        <h2 className="text-3xl font-bold mb-6 text-center font-sans">
+          🔐 Secret
+        </h2>
+        {error ? (
+          <p className="text-red-400 font-bold text-lg text-center font-sans">
+            {error}
+          </p>
         ) : (
           <>
-            <pre className="bg-gray-700 p-4 rounded text-lg break-words">
+            <pre className="bg-gray-700 p-6 rounded-lg text-lg break-words text-green-300 shadow-inner animate-fade-in font-sans">
               {secret}
             </pre>
-            <p className="mt-4 text-sm text-gray-300">
+            <p className="mt-4 text-sm text-gray-300 text-center font-sans">
               ✅ This secret has now been deleted and cannot be viewed again.
             </p>
             <button
-              className="mt-4 bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded"
+              className="mt-4 bg-purple-600 hover:bg-purple-700 px-6 py-3 rounded-lg font-semibold transition font-sans"
               onClick={handleCopy}
             >
               📋 {copied ? "Copied!" : "Copy to Clipboard"}
             </button>
           </>
         )}
-      </div>
+      </motion.div>
+      <style jsx>{`
+        @keyframes fade-in {
+          from {
+            opacity: 0;
+            transform: scale(0.95);
+          }
+          to {
+            opacity: 1;
+            transform: scale(1);
+          }
+        }
+        .animate-fade-in {
+          animation: fade-in 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+      `}</style>
     </div>
   );
 }
