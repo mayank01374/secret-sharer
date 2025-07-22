@@ -5,7 +5,7 @@ import { nanoid } from 'nanoid';
 
 const router = Router();
 
-router.post('/shorten', async (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response) => {
   const { content, expiresIn = 60 } = req.body;
 
   if (!content) return res.status(400).json({ error: 'Ciphertext required' });
