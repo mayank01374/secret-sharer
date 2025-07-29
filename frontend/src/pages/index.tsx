@@ -93,13 +93,20 @@ export default function HomePage() {
         },
         body: JSON.stringify({ ciphertext, iv, expiresIn }),
       });
-      const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || "Something went wrong");
+        const errData = await res.json().catch(() => ({}));
+        console.error("Backend error:", errData);
+        throw new Error(errData.error || "Something went wrong");
+      }
+      const data = await res.json();
+      if (!data || !data.secretUrl) {
+        console.error("Malformed backend response:", data);
+        throw new Error("Malformed backend response");
       }
       setSecretUrl(`${data.secretUrl}#${key.toString(CryptoJS.enc.Base64)}`);
       setSubmitted(true);
     } catch (err) {
+      console.error("Frontend error:", err);
       if (err instanceof Error) {
         setError(err.message);
       } else {
