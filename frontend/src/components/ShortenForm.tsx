@@ -48,6 +48,14 @@ export default function ShortenForm() {
           .join("")
       );
 
+      // Generate explicit IV
+      const ivBytes = crypto.getRandomValues(new Uint8Array(16));
+      const iv = CryptoJS.enc.Hex.parse(
+        Array.from(ivBytes)
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join("")
+      );
+
       // Validate key
       if (!key || typeof key !== "object") {
         throw new Error("Encryption key generation failed.");
@@ -60,14 +68,18 @@ export default function ShortenForm() {
       console.log("🔐 key constructor:", key?.constructor?.name);
 
       // 2. Encrypt the message
-      const encrypted = CryptoJS.AES.encrypt(content, key);
+      const encrypted = CryptoJS.AES.encrypt(content, key, {
+        iv,
+        mode: CryptoJS.mode.CBC,
+        padding: CryptoJS.pad.Pkcs7,
+      });
       const ciphertext = encrypted.ciphertext.toString(CryptoJS.enc.Base64);
-      const iv = encrypted.iv.toString(CryptoJS.enc.Hex);
+      const ivHex = iv.toString(CryptoJS.enc.Hex);
       // 3. Send ciphertext and iv to backend
       const res = await fetch(`${BACKEND_URL}/shorten`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ciphertext, iv, expiresIn }),
+        body: JSON.stringify({ ciphertext, iv: ivHex, expiresIn }),
       });
 
       let data;
