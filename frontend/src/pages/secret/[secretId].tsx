@@ -1,7 +1,9 @@
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/router";
 import { motion } from "framer-motion";
-import { decryptMessage, importKey } from "@/utils/encryption";
+import // decryptMessage,
+// importKey,
+"@/utils/encryption";
 import CryptoJS from "crypto-js";
 
 const BACKEND_URL =
