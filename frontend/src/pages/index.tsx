@@ -86,7 +86,7 @@ export default function HomePage() {
       const encrypted = CryptoJS.AES.encrypt(content, key);
       const ciphertext = encrypted.ciphertext.toString(CryptoJS.enc.Base64);
       const iv = encrypted.iv.toString(CryptoJS.enc.Hex);
-      const res = await fetch(`${BACKEND_URL}/shorten`, {
+      const res = await fetch(`${BACKEND_URL}/create`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
