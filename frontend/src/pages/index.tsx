@@ -102,12 +102,23 @@ export default function HomePage() {
       }
 
       // Use CryptoJS for encryption, matching ShortenForm
-      const key = CryptoJS.lib.WordArray.random(32);
+      const randomBytes = crypto.getRandomValues(new Uint8Array(32));
+      const key = CryptoJS.enc.Hex.parse(
+        Array.from(randomBytes)
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join("")
+      );
 
       // Validate key
-      if (!key || !CryptoJS.lib.WordArray.isPrototypeOf(key)) {
+      if (!key || typeof key !== "object") {
         throw new Error("Encryption key generation failed.");
       }
+
+      // Debug logging
+      console.log("🔐 content:", content);
+      console.log("🔐 key (typeof):", typeof key);
+      console.log("🔐 key.toString():", key?.toString());
+      console.log("🔐 key constructor:", key?.constructor?.name);
 
       const encrypted = CryptoJS.AES.encrypt(content, key);
       const ciphertext = encrypted.ciphertext.toString(CryptoJS.enc.Base64);
