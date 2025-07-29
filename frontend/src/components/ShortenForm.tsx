@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import CryptoJS from "crypto-js";
 import SecretLinkBox from "./SecretLinkBox";
 
@@ -11,6 +11,14 @@ export default function ShortenForm() {
   const [secretUrl, setSecretUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // Reset submitted state when content changes
+  useEffect(() => {
+    if (content !== "") {
+      setSecretUrl("");
+      setError("");
+    }
+  }, [content]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

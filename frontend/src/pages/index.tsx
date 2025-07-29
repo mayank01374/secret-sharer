@@ -21,6 +21,12 @@ export default function HomePage() {
   const [error, setError] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const vantaRef = useRef<HTMLDivElement>(null);
+
+  // Reset submitted state when content changes
+  useEffect(() => {
+    setSubmitted(false);
+  }, [content]);
+
   useEffect(() => {
     let vantaEffect: { destroy?: () => void } | null = null;
     if (typeof window !== "undefined" && vantaRef.current) {
