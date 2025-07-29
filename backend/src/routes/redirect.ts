@@ -21,13 +21,21 @@ router.get('/secret/:id', async (req: Request, res: Response) => {
         return res.status(404).json({ error: 'Secret not found' });
       }
       secret = result.rows[0];
+      if (!secret) {
+        return res.status(404).json({ error: 'Secret not found' });
+      }
       if (secret.accessed_at || new Date(secret.expires_at) < new Date()) {
         return res.status(410).json({ error: 'Secret has expired or was already viewed' });
       }
       ciphertext = secret.encrypted_content;
       iv = secret.iv;
     } else {
-      const cacheData = JSON.parse(cached);
+      let cacheData;
+      try {
+        cacheData = JSON.parse(cached);
+      } catch (e) {
+        return res.status(500).json({ error: 'Corrupted cache data' });
+      }
       ciphertext = cacheData.ciphertext;
       iv = cacheData.iv;
       const result = await db.query('SELECT accessed_at, expires_at FROM secrets WHERE secret_id = $1', [id]);
@@ -35,6 +43,9 @@ router.get('/secret/:id', async (req: Request, res: Response) => {
         return res.status(404).json({ error: 'Secret not found' });
       }
       secret = result.rows[0];
+      if (!secret) {
+        return res.status(404).json({ error: 'Secret not found' });
+      }
       if (secret.accessed_at || new Date(secret.expires_at) < new Date()) {
         return res.status(410).json({ error: 'Secret has expired or was already viewed' });
       }
@@ -76,6 +87,9 @@ router.post('/secret/:secretId/verify', async (req: Request, res: Response) => {
     }
 
     const secret = result.rows[0];
+    if (!secret) {
+      return res.status(404).json({ error: 'Secret not found' });
+    }
     if (!secret.password_hash) {
       return res.status(400).json({ error: 'This secret does not require a password' });
     }
