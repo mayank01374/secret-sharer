@@ -50,13 +50,15 @@ export default function SecretLinkBox({ secretUrl }: { secretUrl: string }) {
       </div>
       {/* QR Code with fade-in animation */}
       <div className="flex justify-center mt-6 animate-fade-in">
-        <QRCode
-          value={secretUrl}
-          size={148}
-          bgColor="#1a1a1a"
-          fgColor="#18e320"
-          style={{ borderRadius: 12, boxShadow: "0 4px 24px #18e32033" }}
-        />
+        {secretUrl && (
+          <QRCode
+            value={secretUrl}
+            size={148}
+            bgColor="#1a1a1a"
+            fgColor="#18e320"
+            style={{ borderRadius: 12, boxShadow: "0 4px 24px #18e32033" }}
+          />
+        )}
       </div>
       <style jsx>{`
         @keyframes fade-in {

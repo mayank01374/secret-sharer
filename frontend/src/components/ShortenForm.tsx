@@ -30,8 +30,18 @@ export default function ShortenForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ciphertext, iv, expiresIn }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to shorten URL");
+
+      let data;
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error("Invalid JSON response from backend");
+      }
+
+      if (!res.ok || !data.secretUrl) {
+        throw new Error(data?.error || "Failed to generate secret URL");
+      }
+
       // 4. Append encryption key in #fragment (Base64)
       const fullUrl = `${data.secretUrl}#${key.toString(CryptoJS.enc.Base64)}`;
       setSecretUrl(fullUrl);
