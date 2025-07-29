@@ -26,8 +26,28 @@ export default function ShortenForm() {
     setError("");
 
     try {
+      // Validate content before encryption
+      if (!content || content.trim().length === 0) {
+        setError("Please enter a secret.");
+        setLoading(false);
+        return;
+      }
+
+      // Validate content type
+      if (typeof content !== "string") {
+        setError("Secret content must be a string.");
+        setLoading(false);
+        return;
+      }
+
       // 1. Generate AES Key
       const key = CryptoJS.lib.WordArray.random(32);
+
+      // Validate key
+      if (!key || !CryptoJS.lib.WordArray.isPrototypeOf(key)) {
+        throw new Error("Encryption key generation failed.");
+      }
+
       // 2. Encrypt the message
       const encrypted = CryptoJS.AES.encrypt(content, key);
       const ciphertext = encrypted.ciphertext.toString(CryptoJS.enc.Base64);
