@@ -17,6 +17,7 @@ router.get('/secret/:id', async (req: Request, res: Response) => {
 
     if (!cached) {
       const result = await db.query('SELECT * FROM secrets WHERE secret_id = $1', [id]);
+      console.log('DB result for secret:', result.rows);
       if (result.rows.length === 0) {
         return res.status(404).json({ error: 'Secret not found' });
       }
@@ -34,11 +35,14 @@ router.get('/secret/:id', async (req: Request, res: Response) => {
       try {
         cacheData = JSON.parse(cached);
       } catch (e) {
+        console.error('Corrupted cache data:', cached);
         return res.status(500).json({ error: 'Corrupted cache data' });
       }
+      console.log('Cache data:', cacheData);
       ciphertext = cacheData.ciphertext;
       iv = cacheData.iv;
       const result = await db.query('SELECT accessed_at, expires_at FROM secrets WHERE secret_id = $1', [id]);
+      console.log('DB result for cache check:', result.rows);
       if (result.rows.length === 0) {
         return res.status(404).json({ error: 'Secret not found' });
       }
@@ -81,11 +85,10 @@ router.post('/secret/:secretId/verify', async (req: Request, res: Response) => {
       'SELECT password_hash FROM secrets WHERE secret_id = $1',
       [secretId]
     );
-
+    console.log('DB result for password verify:', result.rows);
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Secret not found' });
     }
-
     const secret = result.rows[0];
     if (!secret) {
       return res.status(404).json({ error: 'Secret not found' });
