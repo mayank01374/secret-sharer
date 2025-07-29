@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/router";
 import { motion } from "framer-motion";
+import { decryptMessage, importKey } from "@/utils/encryption";
 import CryptoJS from "crypto-js";
 
 const BACKEND_URL =
@@ -77,7 +78,7 @@ export default function SecretViewer() {
   useEffect(() => {
     if (!secretId) return;
 
-    const hash = window.location.hash.slice(1); // decryption key
+    const hash = window.location.hash.slice(1);
     if (!hash) {
       setError("Missing decryption key in URL.");
       setLoading(false);
@@ -86,15 +87,17 @@ export default function SecretViewer() {
 
     fetch(`${BACKEND_URL}/secret/${secretId}`)
       .then((res) => res.json())
-      .then((data) => {
-        if (!data.content) {
+      .then(async (data) => {
+        if (!data.ciphertext || !data.iv) {
           setError("Secret not found or expired");
           return;
         }
         try {
-          const bytes = CryptoJS.AES.decrypt(data.content, hash);
-          const decrypted = bytes.toString(CryptoJS.enc.Utf8);
-          if (!decrypted) throw new Error("Wrong key or corrupted data");
+          const key = CryptoJS.enc.Base64.parse(hash);
+          const iv = CryptoJS.enc.Hex.parse(data.iv);
+          const decrypted = CryptoJS.AES.decrypt(data.ciphertext, key, {
+            iv,
+          }).toString(CryptoJS.enc.Utf8);
           setSecret(decrypted);
         } catch {
           setError("Failed to decrypt secret.");

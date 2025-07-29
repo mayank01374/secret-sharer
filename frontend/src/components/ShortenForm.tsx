@@ -19,24 +19,21 @@ export default function ShortenForm() {
 
     try {
       // 1. Generate AES Key
-      const key = CryptoJS.lib.WordArray.random(32).toString();
-
+      const key = CryptoJS.lib.WordArray.random(32);
       // 2. Encrypt the message
-      const ciphertext = CryptoJS.AES.encrypt(content, key).toString();
-
-      // 3. Send only ciphertext to backend
+      const encrypted = CryptoJS.AES.encrypt(content, key);
+      const ciphertext = encrypted.ciphertext.toString(CryptoJS.enc.Base64);
+      const iv = encrypted.iv.toString(CryptoJS.enc.Hex);
+      // 3. Send ciphertext and iv to backend
       const res = await fetch(`${BACKEND_URL}/shorten`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: ciphertext, expiresIn }),
+        body: JSON.stringify({ ciphertext, iv, expiresIn }),
       });
-
       const data = await res.json();
-
       if (!res.ok) throw new Error(data.error || "Failed to shorten URL");
-
-      // 4. Append encryption key in #fragment
-      const fullUrl = `${data.secretUrl}#${key}`;
+      // 4. Append encryption key in #fragment (Base64)
+      const fullUrl = `${data.secretUrl}#${key.toString(CryptoJS.enc.Base64)}`;
       setSecretUrl(fullUrl);
     } catch (err: unknown) {
       if (err instanceof Error) setError(err.message);

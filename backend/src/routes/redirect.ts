@@ -2,32 +2,20 @@ import { Router, Request, Response } from 'express';
 import db from '../db';
 import redis from '../cache';
 import bcrypt from 'bcrypt';
-import crypto from 'crypto';
 
 const router = Router();
-
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'your-secret-key-32-chars-long!!';
-
-function decrypt(encryptedText: string): string {
-  const parts = encryptedText.split(':');
-  const iv = Buffer.from(parts[0], 'hex');
-  const encrypted = parts[1];
-  const decipher = crypto.createDecipher('aes-256-cbc', ENCRYPTION_KEY);
-  let decrypted = decipher.update(encrypted, 'hex', 'utf8');
-  decrypted += decipher.final('utf8');
-  return decrypted;
-}
 
 router.get('/secret/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
 
   try {
     const redisKey = `secret:${id}`;
-    let ciphertext = await redis.get(redisKey);
-    let secret: any = null;
+    const cached = await redis.get(redisKey);
+    let ciphertext: string | null = null;
     let iv: string | null = null;
+    let secret: any = null;
 
-    if (!ciphertext) {
+    if (!cached) {
       const result = await db.query('SELECT * FROM secrets WHERE secret_id = $1', [id]);
       if (result.rows.length === 0) {
         return res.status(404).json({ error: 'Secret not found' });
@@ -39,8 +27,10 @@ router.get('/secret/:id', async (req: Request, res: Response) => {
       ciphertext = secret.encrypted_content;
       iv = secret.iv;
     } else {
-      // If found in redis, fetch iv from db
-      const result = await db.query('SELECT iv, accessed_at, expires_at FROM secrets WHERE secret_id = $1', [id]);
+      const cacheData = JSON.parse(cached);
+      ciphertext = cacheData.ciphertext;
+      iv = cacheData.iv;
+      const result = await db.query('SELECT accessed_at, expires_at FROM secrets WHERE secret_id = $1', [id]);
       if (result.rows.length === 0) {
         return res.status(404).json({ error: 'Secret not found' });
       }
@@ -48,7 +38,6 @@ router.get('/secret/:id', async (req: Request, res: Response) => {
       if (secret.accessed_at || new Date(secret.expires_at) < new Date()) {
         return res.status(410).json({ error: 'Secret has expired or was already viewed' });
       }
-      iv = secret.iv;
     }
 
     if (!ciphertext || !iv) {
@@ -65,7 +54,7 @@ router.get('/secret/:id', async (req: Request, res: Response) => {
        VALUES ($1, $2, $3, $4)`,
       [id, 'accessed', req.ip, req.headers['user-agent']]
     );
-    return res.json({ content: ciphertext });
+    return res.json({ ciphertext, iv });
   } catch (err) {
     console.error('Error retrieving secret:', err);
     return res.status(500).json({ error: 'Internal server error' });

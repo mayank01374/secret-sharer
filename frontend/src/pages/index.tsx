@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import SecretLinkBox from "@/components/SecretLinkBox";
-import CryptoJS from "crypto-js";
+import { generateKey, encryptMessage, exportKey } from "@/utils/encryption";
 const BACKEND_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3000";
 
@@ -81,18 +81,15 @@ export default function HomePage() {
     setSecretUrl("");
 
     try {
-      // Generate encryption key and encrypt the secret
-      const key = CryptoJS.lib.WordArray.random(32).toString();
-      const ciphertext = CryptoJS.AES.encrypt(content, key).toString();
+      const key = await generateKey();
+      const { ciphertext, iv } = await encryptMessage(content, key);
+      const keyString = await exportKey(key);
       const res = await fetch(`${BACKEND_URL}/create`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          content: ciphertext,
-          expiresIn,
-        }),
+        body: JSON.stringify({ ciphertext, iv, expiresIn }),
       });
 
       const data = await res.json();
@@ -101,7 +98,7 @@ export default function HomePage() {
         throw new Error(data.error || "Something went wrong");
       }
 
-      setSecretUrl(`${data.secretUrl}#${key}`);
+      setSecretUrl(`${data.secretUrl}#${keyString}`);
       setSubmitted(true);
     } catch (err) {
       if (err instanceof Error) {
