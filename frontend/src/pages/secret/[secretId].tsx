@@ -2,15 +2,39 @@ import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/router";
 import { motion } from "framer-motion";
 import CryptoJS from "crypto-js";
+import Head from "next/head";
 
 const BACKEND_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3000";
 
-interface WindowWithVanta extends Window {
-  VANTA?: {
-    NET?: (options: Record<string, unknown>) => { destroy?: () => void };
-  };
-  THREE?: unknown;
+// Define Vanta.js types
+interface VantaEffect {
+  destroy: () => void;
+}
+
+interface VantaOptions {
+  el: HTMLElement;
+  mouseControls?: boolean;
+  touchControls?: boolean;
+  gyroControls?: boolean;
+  minHeight?: number;
+  minWidth?: number;
+  scale?: number;
+  scaleMobile?: number;
+  color?: number;
+  backgroundColor?: number;
+  points?: number;
+  maxDistance?: number;
+  spacing?: number;
+}
+
+// Declare global Vanta property on window
+declare global {
+  interface Window {
+    VANTA?: {
+      NET: (options: VantaOptions) => VantaEffect;
+    };
+  }
 }
 
 export default function SecretViewer() {
@@ -20,59 +44,39 @@ export default function SecretViewer() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+
+  // Password State
   const [passwordRequired, setPasswordRequired] = useState(false);
   const [passwordInput, setPasswordInput] = useState("");
-  const vantaRef = useRef<HTMLDivElement>(null);
 
-  // Background Effect (Vanta.js)
+  const vantaRef = useRef<HTMLDivElement>(null);
+  const vantaEffect = useRef<VantaEffect | null>(null);
+
   useEffect(() => {
-    let vantaEffect: { destroy?: () => void } | null = null;
-    if (typeof window !== "undefined" && vantaRef.current) {
-      const win = window as WindowWithVanta;
-      const loadVanta = async () => {
-        if (!win.THREE) {
-          await new Promise((resolve) => {
-            const script = document.createElement("script");
-            script.src =
-              "https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js";
-            script.onload = resolve;
-            document.body.appendChild(script);
-          });
-        }
-        if (!win.VANTA || !win.VANTA.NET) {
-          await new Promise((resolve) => {
-            const script = document.createElement("script");
-            script.src =
-              "https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.net.min.js";
-            script.onload = resolve;
-            document.body.appendChild(script);
-          });
-        }
-        if (win.VANTA && win.VANTA.NET) {
-          vantaEffect = win.VANTA.NET({
-            el: vantaRef.current,
-            mouseControls: true,
-            touchControls: true,
-            gyroControls: false,
-            minHeight: 200.0,
-            minWidth: 200.0,
-            scale: 1.0,
-            scaleMobile: 1.0,
-            color: 0x18e320,
-            backgroundColor: 0x9091f,
-            points: 10,
-            maxDistance: 20,
-            spacing: 15,
-            showDots: true,
-          });
-        }
-      };
-      loadVanta();
+    if (
+      !vantaEffect.current &&
+      vantaRef.current &&
+      typeof window !== "undefined" &&
+      window.VANTA
+    ) {
+      vantaEffect.current = window.VANTA.NET({
+        el: vantaRef.current,
+        mouseControls: true,
+        touchControls: true,
+        gyroControls: false,
+        minHeight: 200.0,
+        minWidth: 200.0,
+        scale: 1.0,
+        scaleMobile: 1.0,
+        color: 0xa855f7, // Purple accent
+        backgroundColor: 0x0a0a0a, // Dark background
+        points: 12.0,
+        maxDistance: 22.0,
+        spacing: 18.0,
+      });
     }
     return () => {
-      if (vantaEffect && typeof vantaEffect.destroy === "function") {
-        vantaEffect.destroy();
-      }
+      if (vantaEffect.current) vantaEffect.current.destroy();
     };
   }, []);
 
@@ -104,9 +108,11 @@ export default function SecretViewer() {
 
       // CASE 2: Immediate Success
       decryptAndShow(data.ciphertext, data.iv);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setError(err.message || "Failed to load secret.");
+      const errorMessage =
+        err instanceof Error ? err.message : "Failed to load secret.";
+      setError(errorMessage);
       setLoading(false);
     }
   };
@@ -125,8 +131,10 @@ export default function SecretViewer() {
       if (!res.ok) throw new Error(data.error || "Invalid Password");
 
       decryptAndShow(data.ciphertext, data.iv);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      const errorMessage =
+        err instanceof Error ? err.message : "An error occurred";
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -145,7 +153,7 @@ export default function SecretViewer() {
 
       setSecret(decrypted);
       setPasswordRequired(false);
-    } catch (e) {
+    } catch {
       setError("Decryption failed. The link might be broken.");
     } finally {
       setLoading(false);
@@ -161,87 +169,92 @@ export default function SecretViewer() {
   };
 
   return (
-    <div
-      ref={vantaRef}
-      className="min-h-screen w-full bg-[#0a0a0a] text-white px-8 py-12 flex items-center justify-center relative"
-    >
-      <div className="absolute inset-0 z-0" />
-      <motion.div
-        className="bg-white/5 backdrop-blur-lg border border-white/10 rounded-2xl p-8 shadow-2xl max-w-xl w-full z-10"
-        initial={{ opacity: 0, y: 30 }}
-        animate={{ opacity: 1, y: 0 }}
+    <>
+      <Head>
+        <title>Reveal Secret | SecretSharer</title>
+      </Head>
+      <div
+        ref={vantaRef}
+        className="min-h-screen w-full bg-[#0a0a0a] text-white px-8 py-12 flex items-center justify-center relative"
       >
-        <h2 className="text-3xl font-bold mb-6 text-center font-sans">
-          Secret
-        </h2>
+        <div className="absolute inset-0 z-0" />
+        <motion.div
+          className="bg-white/5 backdrop-blur-lg border border-white/10 rounded-2xl p-8 shadow-2xl max-w-xl w-full z-10"
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <h2 className="text-3xl font-bold mb-6 text-center font-sans">
+            Secret
+          </h2>
 
-        {error && (
-          <p className="text-red-400 font-bold text-lg text-center mb-4">
-            {error}
-          </p>
-        )}
-
-        {/* State 1: Ready to Reveal */}
-        {!secret && !error && !passwordRequired && (
-          <div className="text-center">
-            <p className="text-gray-300 mb-6">
-              This secret is safe. Click below to reveal and destroy it.
+          {error && (
+            <p className="text-red-400 font-bold text-lg text-center mb-4">
+              {error}
             </p>
-            <button
-              onClick={handleReveal}
-              disabled={loading}
-              className={`px-8 py-4 rounded-lg font-bold text-lg transition-all transform hover:scale-105 ${
-                loading
-                  ? "bg-gray-600 cursor-not-allowed"
-                  : "bg-green-600 hover:bg-green-500 text-white"
-              }`}
-            >
-              {loading ? "Checking..." : "Reveal Secret"}
-            </button>
-          </div>
-        )}
+          )}
 
-        {/* State 2: Password Required */}
-        {passwordRequired && !secret && (
-          <div className="flex flex-col gap-4">
-            <p className="text-center text-yellow-400 font-semibold">
-              Password Protected
-            </p>
-            <input
-              type="password"
-              value={passwordInput}
-              onChange={(e) => setPasswordInput(e.target.value)}
-              placeholder="Enter Password..."
-              className="p-3 rounded bg-gray-800 text-white border border-gray-600 focus:outline-none focus:border-purple-500"
-            />
-            <button
-              onClick={handlePasswordSubmit}
-              disabled={loading}
-              className="bg-purple-600 px-6 py-3 rounded font-bold text-white hover:bg-purple-500 transition"
-            >
-              {loading ? "Unlocking..." : "Unlock & View"}
-            </button>
-          </div>
-        )}
+          {/* State 1: Ready to Reveal */}
+          {!secret && !error && !passwordRequired && (
+            <div className="text-center">
+              <p className="text-gray-300 mb-6">
+                This secret is safe. Click below to reveal and destroy it.
+              </p>
+              <button
+                onClick={handleReveal}
+                disabled={loading}
+                className={`px-8 py-4 rounded-lg font-bold text-lg transition-all transform hover:scale-105 ${
+                  loading
+                    ? "bg-gray-600 cursor-not-allowed"
+                    : "bg-green-600 hover:bg-green-500 text-white"
+                }`}
+              >
+                {loading ? "Checking..." : "Reveal Secret"}
+              </button>
+            </div>
+          )}
 
-        {/* State 3: Secret Revealed */}
-        {secret && (
-          <>
-            <pre className="bg-gray-700 p-6 rounded-lg text-lg break-words text-green-300 shadow-inner">
-              {secret}
-            </pre>
-            <p className="mt-4 text-sm text-gray-300 text-center">
-              This secret has now been deleted and cannot be viewed again.
-            </p>
-            <button
-              className="mt-4 w-full bg-purple-600 hover:bg-purple-700 px-6 py-3 rounded-lg font-semibold transition"
-              onClick={handleCopy}
-            >
-              📋 {copied ? "Copied!" : "Copy to Clipboard"}
-            </button>
-          </>
-        )}
-      </motion.div>
-    </div>
+          {/* State 2: Password Required */}
+          {passwordRequired && !secret && (
+            <div className="flex flex-col gap-4">
+              <p className="text-center text-yellow-400 font-semibold">
+                🔒 Password Protected
+              </p>
+              <input
+                type="password"
+                value={passwordInput}
+                onChange={(e) => setPasswordInput(e.target.value)}
+                placeholder="Enter Password..."
+                className="p-3 rounded bg-gray-800 text-white border border-gray-600 focus:outline-none focus:border-purple-500"
+              />
+              <button
+                onClick={handlePasswordSubmit}
+                disabled={loading}
+                className="bg-purple-600 px-6 py-3 rounded font-bold text-white hover:bg-purple-500 transition"
+              >
+                {loading ? "Unlocking..." : "Unlock & View"}
+              </button>
+            </div>
+          )}
+
+          {/* State 3: Secret Revealed */}
+          {secret && (
+            <>
+              <pre className="bg-gray-700 p-6 rounded-lg text-lg break-words text-green-300 shadow-inner whitespace-pre-wrap">
+                {secret}
+              </pre>
+              <p className="mt-4 text-sm text-gray-300 text-center">
+                This secret has now been deleted and cannot be viewed again.
+              </p>
+              <button
+                className="mt-4 w-full bg-purple-600 hover:bg-purple-700 px-6 py-3 rounded-lg font-semibold transition"
+                onClick={handleCopy}
+              >
+                📋 {copied ? "Copied!" : "Copy to Clipboard"}
+              </button>
+            </>
+          )}
+        </motion.div>
+      </div>
+    </>
   );
 }
