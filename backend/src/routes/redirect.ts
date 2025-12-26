@@ -10,7 +10,15 @@ router.get('/secret/:id', async (req: Request, res: Response) => {
 
   try {
     const redisKey = `secret:${id}`;
-    const cached = await redis.get(redisKey);
+    
+    // 1. Try to get from Cache (fail safely if Redis is down)
+    let cached = null;
+    try {
+      cached = await redis.get(redisKey);
+    } catch (err) {
+      console.warn('Redis unavailable, skipping cache check:', err);
+    }
+
     let ciphertext: string | null = null;
     let iv: string | null = null;
     let secret: any = null;
@@ -23,52 +31,54 @@ router.get('/secret/:id', async (req: Request, res: Response) => {
       }
       secret = result.rows[0];
       
-      if (secret.accessed_at || new Date(secret.expires_at) < new Date()) {
+      // Check expiration
+      if (secret.accessed_at || (secret.expires_at && new Date(secret.expires_at) < new Date())) {
         return res.status(410).json({ error: 'Secret has expired or was already viewed' });
       }
       ciphertext = secret.encrypted_content;
       iv = secret.iv;
     } else {
+      // Cache hit
       let cacheData;
       try {
         cacheData = JSON.parse(cached);
+        ciphertext = cacheData.ciphertext;
+        iv = cacheData.iv;
       } catch (e) {
-        console.error('Corrupted cache data:', cached);
-        return res.status(500).json({ error: 'Corrupted cache data' });
+        console.error('Corrupted cache data');
       }
-      
-      ciphertext = cacheData.ciphertext;
-      iv = cacheData.iv;
-      
-      // Double check DB for status even if cached
+
+      // Double check DB to ensure it wasn't burned by someone else just now
       const result = await db.query('SELECT accessed_at, expires_at FROM secrets WHERE secret_id = $1', [id]);
-      if (result.rows.length === 0) {
-        return res.status(404).json({ error: 'Secret not found' });
-      }
-      secret = result.rows[0];
-      if (secret.accessed_at || new Date(secret.expires_at) < new Date()) {
-        return res.status(410).json({ error: 'Secret has expired or was already viewed' });
+      if (result.rows.length > 0) {
+        secret = result.rows[0];
+        if (secret.accessed_at || (secret.expires_at && new Date(secret.expires_at) < new Date())) {
+          return res.status(410).json({ error: 'Secret has expired or was already viewed' });
+        }
       }
     }
 
     if (!ciphertext || !iv) {
-      return res.status(404).json({ error: 'Secret not found' });
+      return res.status(404).json({ error: 'Secret data unavailable' });
     }
 
-    // 1. Mark as accessed
+    // 2. Mark as accessed (The "Burn")
     await db.query(
       'UPDATE secrets SET accessed_at = $1, access_count = access_count + 1 WHERE secret_id = $2',
       [new Date(), id]
     );
 
-    // 2. Clear cache
-    await redis.del(redisKey);
+    // 3. Clear cache (fail safely)
+    try {
+      await redis.del(redisKey);
+    } catch (e) {
+      console.warn('Redis unavailable, could not clear cache');
+    }
 
-    // 3. Log audit (SAFE INSERT)
-    // We use || null to ensure we never pass 'undefined' to Postgres
-    const ip = req.ip || null;
+    // 4. Log audit (fail safely - DO NOT CRASH REQUEST)
+    const ip = req.ip || null; // Ensure null, never undefined
     const userAgent = req.headers['user-agent'] || null;
-    
+
     try {
       await db.query(
         `INSERT INTO audit_logs (secret_id, event_type, ip_address, user_agent)
@@ -76,13 +86,14 @@ router.get('/secret/:id', async (req: Request, res: Response) => {
         [id, 'accessed', ip, userAgent]
       );
     } catch (logErr) {
-      // If logging fails (e.g. missing table), log to console but DON'T fail the request
-      console.error('Failed to write audit log:', logErr);
+      console.error('Failed to write audit log (Non-fatal):', logErr);
     }
 
+    // 5. Return the secret
     return res.json({ ciphertext, iv });
+
   } catch (err) {
-    console.error('Error retrieving secret:', err);
+    console.error('CRITICAL ERROR in /secret/:id:', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
