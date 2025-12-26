@@ -17,14 +17,12 @@ router.get('/secret/:id', async (req: Request, res: Response) => {
 
     if (!cached) {
       const result = await db.query('SELECT * FROM secrets WHERE secret_id = $1', [id]);
-      console.log('DB result for secret:', result.rows);
+      
       if (result.rows.length === 0) {
         return res.status(404).json({ error: 'Secret not found' });
       }
       secret = result.rows[0];
-      if (!secret) {
-        return res.status(404).json({ error: 'Secret not found' });
-      }
+      
       if (secret.accessed_at || new Date(secret.expires_at) < new Date()) {
         return res.status(410).json({ error: 'Secret has expired or was already viewed' });
       }
@@ -38,18 +36,16 @@ router.get('/secret/:id', async (req: Request, res: Response) => {
         console.error('Corrupted cache data:', cached);
         return res.status(500).json({ error: 'Corrupted cache data' });
       }
-      console.log('Cache data:', cacheData);
+      
       ciphertext = cacheData.ciphertext;
       iv = cacheData.iv;
+      
+      // Double check DB for status even if cached
       const result = await db.query('SELECT accessed_at, expires_at FROM secrets WHERE secret_id = $1', [id]);
-      console.log('DB result for cache check:', result.rows);
       if (result.rows.length === 0) {
         return res.status(404).json({ error: 'Secret not found' });
       }
       secret = result.rows[0];
-      if (!secret) {
-        return res.status(404).json({ error: 'Secret not found' });
-      }
       if (secret.accessed_at || new Date(secret.expires_at) < new Date()) {
         return res.status(410).json({ error: 'Secret has expired or was already viewed' });
       }
@@ -59,16 +55,31 @@ router.get('/secret/:id', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Secret not found' });
     }
 
+    // 1. Mark as accessed
     await db.query(
       'UPDATE secrets SET accessed_at = $1, access_count = access_count + 1 WHERE secret_id = $2',
       [new Date(), id]
     );
+
+    // 2. Clear cache
     await redis.del(redisKey);
-    await db.query(
-      `INSERT INTO audit_logs (secret_id, event_type, ip_address, user_agent)
-       VALUES ($1, $2, $3, $4)`,
-      [id, 'accessed', req.ip, req.headers['user-agent']]
-    );
+
+    // 3. Log audit (SAFE INSERT)
+    // We use || null to ensure we never pass 'undefined' to Postgres
+    const ip = req.ip || null;
+    const userAgent = req.headers['user-agent'] || null;
+    
+    try {
+      await db.query(
+        `INSERT INTO audit_logs (secret_id, event_type, ip_address, user_agent)
+         VALUES ($1, $2, $3, $4)`,
+        [id, 'accessed', ip, userAgent]
+      );
+    } catch (logErr) {
+      // If logging fails (e.g. missing table), log to console but DON'T fail the request
+      console.error('Failed to write audit log:', logErr);
+    }
+
     return res.json({ ciphertext, iv });
   } catch (err) {
     console.error('Error retrieving secret:', err);
@@ -85,14 +96,12 @@ router.post('/secret/:secretId/verify', async (req: Request, res: Response) => {
       'SELECT password_hash FROM secrets WHERE secret_id = $1',
       [secretId]
     );
-    console.log('DB result for password verify:', result.rows);
+    
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Secret not found' });
     }
     const secret = result.rows[0];
-    if (!secret) {
-      return res.status(404).json({ error: 'Secret not found' });
-    }
+    
     if (!secret.password_hash) {
       return res.status(400).json({ error: 'This secret does not require a password' });
     }
@@ -108,4 +117,4 @@ router.post('/secret/:secretId/verify', async (req: Request, res: Response) => {
   }
 });
 
-export default router; 
+export default router;
