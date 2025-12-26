@@ -1,8 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/router";
 import { motion } from "framer-motion";
-
-("@/utils/encryption");
 import CryptoJS from "crypto-js";
 
 const BACKEND_URL =
@@ -24,6 +22,7 @@ export default function SecretViewer() {
   const [copied, setCopied] = useState(false);
   const vantaRef = useRef<HTMLDivElement>(null);
 
+  // Background Effect (Vanta.js)
   useEffect(() => {
     let vantaEffect: { destroy?: () => void } | null = null;
     if (typeof window !== "undefined" && vantaRef.current) {
@@ -75,38 +74,6 @@ export default function SecretViewer() {
     };
   }, []);
 
-  // useEffect(() => {
-  //   if (!secretId) return;
-
-  //   const hash = window.location.hash.slice(1);
-  //   if (!hash) {
-  //     setError("Missing decryption key in URL.");
-  //     setLoading(false);
-  //     return;
-  //   }
-
-  //   fetch(`${BACKEND_URL}/secret/${secretId}`)
-  //     .then((res) => res.json())
-  //     .then(async (data) => {
-  //       if (!data.ciphertext || !data.iv) {
-  //         setError("Secret not found or expired");
-  //         return;
-  //       }
-  //       try {
-  //         const key = CryptoJS.enc.Base64.parse(hash);
-  //         const iv = CryptoJS.enc.Hex.parse(data.iv);
-  //         const decrypted = CryptoJS.AES.decrypt(data.ciphertext, key, {
-  //           iv,
-  //         }).toString(CryptoJS.enc.Utf8);
-  //         setSecret(decrypted);
-  //       } catch {
-  //         setError("Failed to decrypt secret.");
-  //       }
-  //     })
-  //     .catch(() => setError("Error loading secret"))
-  //     .finally(() => setLoading(false));
-  // }, [secretId]);
-
   const handleReveal = async () => {
     if (!secretId) return;
 
@@ -138,9 +105,13 @@ export default function SecretViewer() {
       }
 
       setSecret(decrypted);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setError(err.message || "Failed to load secret.");
+      let message = "Failed to load secret.";
+      if (err instanceof Error) {
+        message = err.message;
+      }
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -153,13 +124,6 @@ export default function SecretViewer() {
       setTimeout(() => setCopied(false), 2000);
     }
   };
-
-  if (loading)
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a] text-white">
-        <p className="text-center text-lg">Loading...</p>
-      </div>
-    );
 
   return (
     <div
@@ -175,17 +139,15 @@ export default function SecretViewer() {
         transition={{ duration: 0.6 }}
       >
         <h2 className="text-3xl font-bold mb-6 text-center font-sans">
-          Secret
+          🔐 Secret
         </h2>
 
-        {/* ERROR STATE */}
         {error && (
           <p className="text-red-400 font-bold text-lg text-center font-sans mb-4">
             {error}
           </p>
         )}
 
-        {/* REVEAL BUTTON (Initial State) */}
         {!secret && !error && (
           <div className="text-center">
             <p className="text-gray-300 mb-6">
@@ -200,19 +162,18 @@ export default function SecretViewer() {
                   : "bg-green-600 hover:bg-green-500 text-white shadow-lg hover:shadow-green-500/50"
               }`}
             >
-              {loading ? "Decrypting..." : "Reveal Secret"}
+              {loading ? "Decrypting..." : "🔓 Reveal Secret"}
             </button>
           </div>
         )}
 
-        {/* SECRET DISPLAY (After Reveal) */}
         {secret && (
           <>
             <pre className="bg-gray-700 p-6 rounded-lg text-lg break-words text-green-300 shadow-inner animate-fade-in font-sans">
               {secret}
             </pre>
             <p className="mt-4 text-sm text-gray-300 text-center font-sans">
-              This secret has now been deleted and cannot be viewed again.
+              ✅ This secret has now been deleted and cannot be viewed again.
             </p>
             <button
               className="mt-4 w-full bg-purple-600 hover:bg-purple-700 px-6 py-3 rounded-lg font-semibold transition font-sans"
@@ -223,7 +184,6 @@ export default function SecretViewer() {
           </>
         )}
       </motion.div>
-      {/* Style tag remains the same... */}
       <style jsx>{`
         @keyframes fade-in {
           from {
