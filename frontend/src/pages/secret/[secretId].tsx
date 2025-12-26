@@ -1,15 +1,13 @@
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/router";
 import { motion } from "framer-motion";
-import // decryptMessage,
-// importKey,
-"@/utils/encryption";
+
+("@/utils/encryption");
 import CryptoJS from "crypto-js";
 
 const BACKEND_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3000";
 
-// Custom type for window with VANTA and THREE
 interface WindowWithVanta extends Window {
   VANTA?: {
     NET?: (options: Record<string, unknown>) => { destroy?: () => void };
@@ -21,7 +19,7 @@ export default function SecretViewer() {
   const router = useRouter();
   const { secretId } = router.query;
   const [secret, setSecret] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
   const vantaRef = useRef<HTMLDivElement>(null);
@@ -77,37 +75,76 @@ export default function SecretViewer() {
     };
   }, []);
 
-  useEffect(() => {
+  // useEffect(() => {
+  //   if (!secretId) return;
+
+  //   const hash = window.location.hash.slice(1);
+  //   if (!hash) {
+  //     setError("Missing decryption key in URL.");
+  //     setLoading(false);
+  //     return;
+  //   }
+
+  //   fetch(`${BACKEND_URL}/secret/${secretId}`)
+  //     .then((res) => res.json())
+  //     .then(async (data) => {
+  //       if (!data.ciphertext || !data.iv) {
+  //         setError("Secret not found or expired");
+  //         return;
+  //       }
+  //       try {
+  //         const key = CryptoJS.enc.Base64.parse(hash);
+  //         const iv = CryptoJS.enc.Hex.parse(data.iv);
+  //         const decrypted = CryptoJS.AES.decrypt(data.ciphertext, key, {
+  //           iv,
+  //         }).toString(CryptoJS.enc.Utf8);
+  //         setSecret(decrypted);
+  //       } catch {
+  //         setError("Failed to decrypt secret.");
+  //       }
+  //     })
+  //     .catch(() => setError("Error loading secret"))
+  //     .finally(() => setLoading(false));
+  // }, [secretId]);
+
+  const handleReveal = async () => {
     if (!secretId) return;
 
     const hash = window.location.hash.slice(1);
     if (!hash) {
       setError("Missing decryption key in URL.");
-      setLoading(false);
       return;
     }
 
-    fetch(`${BACKEND_URL}/secret/${secretId}`)
-      .then((res) => res.json())
-      .then(async (data) => {
-        if (!data.ciphertext || !data.iv) {
-          setError("Secret not found or expired");
-          return;
-        }
-        try {
-          const key = CryptoJS.enc.Base64.parse(hash);
-          const iv = CryptoJS.enc.Hex.parse(data.iv);
-          const decrypted = CryptoJS.AES.decrypt(data.ciphertext, key, {
-            iv,
-          }).toString(CryptoJS.enc.Utf8);
-          setSecret(decrypted);
-        } catch {
-          setError("Failed to decrypt secret.");
-        }
-      })
-      .catch(() => setError("Error loading secret"))
-      .finally(() => setLoading(false));
-  }, [secretId]);
+    setLoading(true);
+    setError("");
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/secret/${secretId}`);
+      const data = await res.json();
+
+      if (!res.ok || !data.ciphertext || !data.iv) {
+        throw new Error(data.error || "Secret not found or expired");
+      }
+
+      const key = CryptoJS.enc.Base64.parse(hash);
+      const iv = CryptoJS.enc.Hex.parse(data.iv);
+      const decrypted = CryptoJS.AES.decrypt(data.ciphertext, key, {
+        iv,
+      }).toString(CryptoJS.enc.Utf8);
+
+      if (!decrypted) {
+        throw new Error("Failed to decrypt secret (Invalid key).");
+      }
+
+      setSecret(decrypted);
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || "Failed to load secret.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleCopy = () => {
     if (secret) {
@@ -138,22 +175,47 @@ export default function SecretViewer() {
         transition={{ duration: 0.6 }}
       >
         <h2 className="text-3xl font-bold mb-6 text-center font-sans">
-          🔐 Secret
+          Secret
         </h2>
-        {error ? (
-          <p className="text-red-400 font-bold text-lg text-center font-sans">
+
+        {/* ERROR STATE */}
+        {error && (
+          <p className="text-red-400 font-bold text-lg text-center font-sans mb-4">
             {error}
           </p>
-        ) : (
+        )}
+
+        {/* REVEAL BUTTON (Initial State) */}
+        {!secret && !error && (
+          <div className="text-center">
+            <p className="text-gray-300 mb-6">
+              This secret is safe. Click below to reveal and destroy it.
+            </p>
+            <button
+              onClick={handleReveal}
+              disabled={loading || !secretId}
+              className={`px-8 py-4 rounded-lg font-bold text-lg transition-all transform hover:scale-105 ${
+                loading
+                  ? "bg-gray-600 cursor-not-allowed"
+                  : "bg-green-600 hover:bg-green-500 text-white shadow-lg hover:shadow-green-500/50"
+              }`}
+            >
+              {loading ? "Decrypting..." : "Reveal Secret"}
+            </button>
+          </div>
+        )}
+
+        {/* SECRET DISPLAY (After Reveal) */}
+        {secret && (
           <>
             <pre className="bg-gray-700 p-6 rounded-lg text-lg break-words text-green-300 shadow-inner animate-fade-in font-sans">
               {secret}
             </pre>
             <p className="mt-4 text-sm text-gray-300 text-center font-sans">
-              ✅ This secret has now been deleted and cannot be viewed again.
+              This secret has now been deleted and cannot be viewed again.
             </p>
             <button
-              className="mt-4 bg-purple-600 hover:bg-purple-700 px-6 py-3 rounded-lg font-semibold transition font-sans"
+              className="mt-4 w-full bg-purple-600 hover:bg-purple-700 px-6 py-3 rounded-lg font-semibold transition font-sans"
               onClick={handleCopy}
             >
               📋 {copied ? "Copied!" : "Copy to Clipboard"}
@@ -161,6 +223,7 @@ export default function SecretViewer() {
           </>
         )}
       </motion.div>
+      {/* Style tag remains the same... */}
       <style jsx>{`
         @keyframes fade-in {
           from {
