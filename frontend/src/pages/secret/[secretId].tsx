@@ -20,6 +20,8 @@ export default function SecretViewer() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+  const [passwordRequired, setPasswordRequired] = useState(false);
+  const [passwordInput, setPasswordInput] = useState("");
   const vantaRef = useRef<HTMLDivElement>(null);
 
   // Background Effect (Vanta.js)
@@ -77,6 +79,7 @@ export default function SecretViewer() {
   const handleReveal = async () => {
     if (!secretId) return;
 
+    // Check hash existence
     const hash = window.location.hash.slice(1);
     if (!hash) {
       setError("Missing decryption key in URL.");
@@ -90,28 +93,60 @@ export default function SecretViewer() {
       const res = await fetch(`${BACKEND_URL}/secret/${secretId}`);
       const data = await res.json();
 
-      if (!res.ok || !data.ciphertext || !data.iv) {
-        throw new Error(data.error || "Secret not found or expired");
+      if (!res.ok) throw new Error(data.error || "Secret not found or expired");
+
+      // CASE 1: Password Required
+      if (data.passwordRequired) {
+        setPasswordRequired(true);
+        setLoading(false);
+        return;
       }
 
+      // CASE 2: Immediate Success
+      decryptAndShow(data.ciphertext, data.iv);
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || "Failed to load secret.");
+      setLoading(false);
+    }
+  };
+
+  const handlePasswordSubmit = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch(`${BACKEND_URL}/secret/${secretId}/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: passwordInput }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) throw new Error(data.error || "Invalid Password");
+
+      decryptAndShow(data.ciphertext, data.iv);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const decryptAndShow = (ciphertext: string, ivHex: string) => {
+    try {
+      const hash = window.location.hash.slice(1);
       const key = CryptoJS.enc.Base64.parse(hash);
-      const iv = CryptoJS.enc.Hex.parse(data.iv);
-      const decrypted = CryptoJS.AES.decrypt(data.ciphertext, key, {
-        iv,
-      }).toString(CryptoJS.enc.Utf8);
+      const iv = CryptoJS.enc.Hex.parse(ivHex);
+      const decrypted = CryptoJS.AES.decrypt(ciphertext, key, { iv }).toString(
+        CryptoJS.enc.Utf8
+      );
 
-      if (!decrypted) {
-        throw new Error("Failed to decrypt secret (Invalid key).");
-      }
+      if (!decrypted) throw new Error("Failed to decrypt (Invalid Key)");
 
       setSecret(decrypted);
-    } catch (err: unknown) {
-      console.error(err);
-      let message = "Failed to load secret.";
-      if (err instanceof Error) {
-        message = err.message;
-      }
-      setError(message);
+      setPasswordRequired(false);
+    } catch (e) {
+      setError("Decryption failed. The link might be broken.");
     } finally {
       setLoading(false);
     }
@@ -128,55 +163,78 @@ export default function SecretViewer() {
   return (
     <div
       ref={vantaRef}
-      id="vanta-bg"
       className="min-h-screen w-full bg-[#0a0a0a] text-white px-8 py-12 flex items-center justify-center relative"
     >
       <div className="absolute inset-0 z-0" />
       <motion.div
-        className="bg-white/5 backdrop-blur-lg border border-white/10 rounded-2xl p-8 shadow-2xl max-w-xl w-full z-10 backdrop-blur-md"
+        className="bg-white/5 backdrop-blur-lg border border-white/10 rounded-2xl p-8 shadow-2xl max-w-xl w-full z-10"
         initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6 }}
       >
         <h2 className="text-3xl font-bold mb-6 text-center font-sans">
           Secret
         </h2>
 
         {error && (
-          <p className="text-red-400 font-bold text-lg text-center font-sans mb-4">
+          <p className="text-red-400 font-bold text-lg text-center mb-4">
             {error}
           </p>
         )}
 
-        {!secret && !error && (
+        {/* State 1: Ready to Reveal */}
+        {!secret && !error && !passwordRequired && (
           <div className="text-center">
             <p className="text-gray-300 mb-6">
               This secret is safe. Click below to reveal and destroy it.
             </p>
             <button
               onClick={handleReveal}
-              disabled={loading || !secretId}
+              disabled={loading}
               className={`px-8 py-4 rounded-lg font-bold text-lg transition-all transform hover:scale-105 ${
                 loading
                   ? "bg-gray-600 cursor-not-allowed"
-                  : "bg-green-600 hover:bg-green-500 text-white shadow-lg hover:shadow-green-500/50"
+                  : "bg-green-600 hover:bg-green-500 text-white"
               }`}
             >
-              {loading ? "Decrypting..." : " Reveal Secret"}
+              {loading ? "Checking..." : "Reveal Secret"}
             </button>
           </div>
         )}
 
+        {/* State 2: Password Required */}
+        {passwordRequired && !secret && (
+          <div className="flex flex-col gap-4">
+            <p className="text-center text-yellow-400 font-semibold">
+              Password Protected
+            </p>
+            <input
+              type="password"
+              value={passwordInput}
+              onChange={(e) => setPasswordInput(e.target.value)}
+              placeholder="Enter Password..."
+              className="p-3 rounded bg-gray-800 text-white border border-gray-600 focus:outline-none focus:border-purple-500"
+            />
+            <button
+              onClick={handlePasswordSubmit}
+              disabled={loading}
+              className="bg-purple-600 px-6 py-3 rounded font-bold text-white hover:bg-purple-500 transition"
+            >
+              {loading ? "Unlocking..." : "Unlock & View"}
+            </button>
+          </div>
+        )}
+
+        {/* State 3: Secret Revealed */}
         {secret && (
           <>
-            <pre className="bg-gray-700 p-6 rounded-lg text-lg break-words text-green-300 shadow-inner animate-fade-in font-sans">
+            <pre className="bg-gray-700 p-6 rounded-lg text-lg break-words text-green-300 shadow-inner">
               {secret}
             </pre>
-            <p className="mt-4 text-sm text-gray-300 text-center font-sans">
+            <p className="mt-4 text-sm text-gray-300 text-center">
               This secret has now been deleted and cannot be viewed again.
             </p>
             <button
-              className="mt-4 w-full bg-purple-600 hover:bg-purple-700 px-6 py-3 rounded-lg font-semibold transition font-sans"
+              className="mt-4 w-full bg-purple-600 hover:bg-purple-700 px-6 py-3 rounded-lg font-semibold transition"
               onClick={handleCopy}
             >
               📋 {copied ? "Copied!" : "Copy to Clipboard"}
@@ -184,21 +242,6 @@ export default function SecretViewer() {
           </>
         )}
       </motion.div>
-      <style jsx>{`
-        @keyframes fade-in {
-          from {
-            opacity: 0;
-            transform: scale(0.95);
-          }
-          to {
-            opacity: 1;
-            transform: scale(1);
-          }
-        }
-        .animate-fade-in {
-          animation: fade-in 0.7s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-      `}</style>
     </div>
   );
 }

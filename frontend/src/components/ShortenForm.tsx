@@ -13,7 +13,6 @@ export default function ShortenForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Reset submitted state when content changes
   useEffect(() => {
     if (content !== "") {
       setSecretUrl("");
@@ -27,29 +26,18 @@ export default function ShortenForm() {
     setError("");
 
     try {
-      // Validate content before encryption
       if (!content || content.trim().length === 0) {
         setError("Please enter a secret.");
         setLoading(false);
         return;
       }
 
-      // Validate content type
-      if (typeof content !== "string") {
-        setError("Secret content must be a string.");
-        setLoading(false);
-        return;
-      }
-
-      // 1. Generate AES Key
       const randomBytes = crypto.getRandomValues(new Uint8Array(32));
       const key = CryptoJS.enc.Hex.parse(
         Array.from(randomBytes)
           .map((b) => b.toString(16).padStart(2, "0"))
           .join("")
       );
-
-      // Generate explicit IV
       const ivBytes = crypto.getRandomValues(new Uint8Array(16));
       const iv = CryptoJS.enc.Hex.parse(
         Array.from(ivBytes)
@@ -57,18 +45,6 @@ export default function ShortenForm() {
           .join("")
       );
 
-      // Validate key
-      if (!key || typeof key !== "object") {
-        throw new Error("Encryption key generation failed.");
-      }
-
-      // Debug logging
-      console.log("🔐 content:", content);
-      console.log("🔐 key (typeof):", typeof key);
-      console.log("🔐 key.toString():", key?.toString());
-      console.log("🔐 key constructor:", key?.constructor?.name);
-
-      // 2. Encrypt the message
       const encrypted = CryptoJS.AES.encrypt(content, key, {
         iv,
         mode: CryptoJS.mode.CBC,
@@ -76,7 +52,7 @@ export default function ShortenForm() {
       });
       const ciphertext = encrypted.ciphertext.toString(CryptoJS.enc.Base64);
       const ivHex = iv.toString(CryptoJS.enc.Hex);
-      // 3. Send ciphertext and iv to backend
+
       const res = await fetch(`${BACKEND_URL}/shorten`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -84,22 +60,15 @@ export default function ShortenForm() {
           ciphertext,
           iv: ivHex,
           expiresIn,
-          password: password || undefined, // Send password if it exists
+          password: password || undefined,
         }),
       });
 
-      let data;
-      try {
-        data = await res.json();
-      } catch {
-        throw new Error("Invalid JSON response from backend");
-      }
-
+      const data = await res.json();
       if (!res.ok || !data.secretUrl) {
         throw new Error(data?.error || "Failed to generate secret URL");
       }
 
-      // 4. Append encryption key in #fragment (Base64)
       const fullUrl = `${data.secretUrl}#${key.toString(CryptoJS.enc.Base64)}`;
       setSecretUrl(fullUrl);
     } catch (err: unknown) {
@@ -109,7 +78,7 @@ export default function ShortenForm() {
       setLoading(false);
     }
   };
-  //gfdgd
+
   return (
     <form onSubmit={handleSubmit}>
       <textarea
@@ -117,19 +86,23 @@ export default function ShortenForm() {
         onChange={(e) => setContent(e.target.value)}
         placeholder="Enter your secret"
         required
-        className="bg-gray-700 text-white p-3 rounded w-full"
+        className="bg-gray-700 text-white p-3 rounded w-full border border-gray-600 focus:outline-none focus:border-purple-500"
       />
-      {/* Add Password Input */}
-      <div className="mt-2">
+
+      <div className="mt-4">
+        <label className="text-gray-300 block mb-1">
+          Password Protection (Optional)
+        </label>
         <input
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          placeholder="Optional Password"
+          placeholder="Enter a password to lock this secret"
           className="bg-gray-700 text-white p-3 rounded w-full border border-gray-600 focus:outline-none focus:border-purple-500"
         />
       </div>
-      <div className="mt-2">
+
+      <div className="mt-4">
         <label className="text-white mr-2">Expires In:</label>
         <select
           value={expiresIn}
@@ -147,9 +120,10 @@ export default function ShortenForm() {
       </div>
       <button
         type="submit"
-        className="mt-2 bg-purple-600 px-4 py-2 rounded text-white"
+        disabled={loading}
+        className="mt-6 w-full bg-purple-600 px-4 py-3 rounded text-white font-bold hover:bg-purple-500 transition"
       >
-        {loading ? "Encrypting..." : "Generate Secret"}
+        {loading ? "Encrypting..." : "Generate Secret Link"}
       </button>
       {error && <p className="text-red-400 mt-2">{error}</p>}
       {secretUrl && <SecretLinkBox secretUrl={secretUrl} />}

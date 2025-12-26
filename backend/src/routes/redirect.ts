@@ -5,7 +5,7 @@ import bcrypt from 'bcrypt';
 
 const router = Router();
 
-// Helper to burn secret (mark as accessed)
+
 const burnSecret = async (id: string, ip: string | null, userAgent: string | undefined) => {
   await db.query(
     'UPDATE secrets SET accessed_at = $1, access_count = access_count + 1 WHERE secret_id = $2',
@@ -24,7 +24,7 @@ const burnSecret = async (id: string, ip: string | null, userAgent: string | und
       [id, 'accessed', ip, userAgent]
     );
   } catch (logErr) {
-    console.error('Failed to write audit log:', logErr);
+    console.error('Failed to write audit log (Non-fatal):', logErr);
   }
 };
 
@@ -32,7 +32,7 @@ router.get('/secret/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
 
   try {
-    // 1. Check DB directly (ignoring cache for simplicity regarding password checks)
+    
     const result = await db.query('SELECT * FROM secrets WHERE secret_id = $1', [id]);
     
     if (result.rows.length === 0) {
@@ -44,12 +44,13 @@ router.get('/secret/:id', async (req: Request, res: Response) => {
       return res.status(410).json({ error: 'Secret has expired or was already viewed' });
     }
 
-    // 2. CHECK PASSWORD
+    
     if (secret.password_hash) {
-      return res.json({ passwordRequired: true }); // STOP HERE if password exists
+      
+      return res.json({ passwordRequired: true }); 
     }
 
-    // 3. If no password, burn and return
+    
     const ip = req.ip || null; 
     const userAgent = req.headers['user-agent'];
     await burnSecret(id, ip, userAgent);
@@ -74,12 +75,12 @@ router.post('/secret/:secretId/verify', async (req: Request, res: Response) => {
     }
     const secret = result.rows[0];
 
-    // Check expiry again
+    
     if (secret.accessed_at || (secret.expires_at && new Date(secret.expires_at) < new Date())) {
       return res.status(410).json({ error: 'Secret has expired or was already viewed' });
     }
     
-    // Verify password
+    
     if (secret.password_hash) {
       const isValid = await bcrypt.compare(password, secret.password_hash);
       if (!isValid) {
@@ -87,7 +88,7 @@ router.post('/secret/:secretId/verify', async (req: Request, res: Response) => {
       }
     }
 
-    // Burn and Return
+    
     const ip = req.ip || null; 
     const userAgent = req.headers['user-agent'];
     await burnSecret(secretId, ip, userAgent);
