@@ -139,7 +139,7 @@ export default function SecretViewer() {
         transition={{ duration: 0.6 }}
       >
         <h2 className="text-3xl font-bold mb-6 text-center font-sans">
-          🔐 Secret
+          Secret
         </h2>
 
         {error && (
@@ -162,7 +162,7 @@ export default function SecretViewer() {
                   : "bg-green-600 hover:bg-green-500 text-white shadow-lg hover:shadow-green-500/50"
               }`}
             >
-              {loading ? "Decrypting..." : "🔓 Reveal Secret"}
+              {loading ? "Decrypting..." : " Reveal Secret"}
             </button>
           </div>
         )}
@@ -173,7 +173,7 @@ export default function SecretViewer() {
               {secret}
             </pre>
             <p className="mt-4 text-sm text-gray-300 text-center font-sans">
-              ✅ This secret has now been deleted and cannot be viewed again.
+              This secret has now been deleted and cannot be viewed again.
             </p>
             <button
               className="mt-4 w-full bg-purple-600 hover:bg-purple-700 px-6 py-3 rounded-lg font-semibold transition font-sans"
