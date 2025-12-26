@@ -7,6 +7,7 @@ const BACKEND_URL =
 
 export default function ShortenForm() {
   const [content, setContent] = useState("");
+  const [password, setPassword] = useState("");
   const [expiresIn, setExpiresIn] = useState(60);
   const [secretUrl, setSecretUrl] = useState("");
   const [loading, setLoading] = useState(false);
@@ -79,7 +80,12 @@ export default function ShortenForm() {
       const res = await fetch(`${BACKEND_URL}/shorten`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ciphertext, iv: ivHex, expiresIn }),
+        body: JSON.stringify({
+          ciphertext,
+          iv: ivHex,
+          expiresIn,
+          password: password || undefined, // Send password if it exists
+        }),
       });
 
       let data;
@@ -113,6 +119,16 @@ export default function ShortenForm() {
         required
         className="bg-gray-700 text-white p-3 rounded w-full"
       />
+      {/* Add Password Input */}
+      <div className="mt-2">
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="Optional Password"
+          className="bg-gray-700 text-white p-3 rounded w-full border border-gray-600 focus:outline-none focus:border-purple-500"
+        />
+      </div>
       <div className="mt-2">
         <label className="text-white mr-2">Expires In:</label>
         <select
